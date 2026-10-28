@@ -368,8 +368,21 @@ def main():
         try:
             leagues = list_leagues(oauth_file)
         except Exception as e:
-            st.error(f"Couldn't reach Yahoo: {e}")
-            st.session_state.pop("oauth_file", None)
+            # Drop this login so the next attempt starts clean.
+            webauth.forget(st.session_state.pop("oauth_file", None))
+            st.session_state.pop("new_refresh_token", None)
+            if "not authorized" in str(e).lower():
+                st.error(
+                    "Yahoo accepted the login, but your Yahoo developer app isn't allowed to "
+                    "read fantasy data. At developer.yahoo.com/apps, open your app and turn on "
+                    "**API Permissions → Fantasy Sports → Read**. If you can't edit that, create "
+                    "a new app with that permission and put its Client ID and Secret in your "
+                    "Secrets. Then click Connect Yahoo again: a new login is needed to pick up "
+                    "the permission.")
+                st.link_button("Connect Yahoo again", webauth.authorize_url(
+                    conf["yahoo"]["client_id"], conf["yahoo"].get("redirect_uri", "oob")))
+            else:
+                st.error(f"Couldn't reach Yahoo: {e}")
             return
         if not leagues:
             st.warning("No leagues found on this Yahoo account for the current season.")
