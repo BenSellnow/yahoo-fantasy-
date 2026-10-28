@@ -1,8 +1,11 @@
 """Plain-text rendering of every analysis."""
 from __future__ import annotations
 
+from dataclasses import dataclass
+
+from .lineup import Lineup
 from .matchup import MatchupOutlook, my_outlook
-from .models import availability
+from .models import INACTIVE_SLOTS, Player, availability
 from .playoffs import simulate_season
 from .waivers import drop_candidates, plan_moves, recommend, top_available
 
@@ -45,41 +48,55 @@ def render_header(analysis) -> str:
             f"Your team: {analysis.team_names.get(analysis.my_key, analysis.my_key)}")
 
 
-def render_lineup(analysis) -> str:
-    out = [section(f"Optimal lineup — week {analysis.league.current_week}")]
+@dataclass
+class LineupAdvice:
+    lineup: Lineup
+    previous: dict[int, str | None]   # player_id -> slot they are in now
+    moves: list[str]
+    injured_active: list[Player]
+    on_bye: list[Player]
+
+
+def lineup_advice(analysis) -> LineupAdvice:
     lu = analysis.best_lineup(analysis.my_roster, "week")
     current = {p.player_id: p.selected_position for p in analysis.my_roster}
-    rows, moves = [], []
-    for slot, p, v in lu.starters:
-        if p is None:
-            rows.append([slot, "(empty — add someone!)", "", ""])
-            continue
-        was = current.get(p.player_id) or "?"
-        rows.append([slot, player_label(p), f"{v:.1f}", "" if was == slot else f"was {was}"])
-        if was in ("BN", None, "?"):
-            moves.append(f"START {p.name} at {slot}")
-    out.append(table(rows, ["Slot", "Player", unit(analysis), "Change"],
-                     ["<", "<", ">", "<"]))
-    bench = [[player_label(p), f"{v:.1f}"] for p, v in lu.bench]
-    if bench:
-        out.append("\nBench:\n" + table(bench, ["Player", unit(analysis)]))
+    moves = [f"START {p.name} at {slot}" for slot, p, _ in lu.starters
+             if p and current.get(p.player_id) in ("BN", None)]
     starters = {p.player_id for _, p, _ in lu.starters if p}
     for p in analysis.my_roster:
         sel = current.get(p.player_id)
-        if sel and sel not in ("BN", "IR", "IL", "IL+", "IR+", "NA") and p.player_id not in starters:
+        if sel and sel not in INACTIVE_SLOTS and p.player_id not in starters:
             moves.append(f"SIT   {p.name} (currently {sel})")
-    alerts = [p for p in analysis.my_roster
-              if availability(p.status) == 0 and not p.on_injury_slot]
-    if moves:
-        out.append("\nSuggested moves:\n  " + "\n  ".join(moves))
+    injured = [p for p in analysis.my_roster
+               if availability(p.status) == 0 and not p.on_injury_slot]
+    byes = [p for p in analysis.my_roster if p.bye_week == analysis.league.current_week]
+    return LineupAdvice(lu, current, moves, injured, byes)
+
+
+def render_lineup(analysis) -> str:
+    out = [section(f"Optimal lineup — week {analysis.league.current_week}")]
+    adv = lineup_advice(analysis)
+    rows = []
+    for slot, p, v in adv.lineup.starters:
+        if p is None:
+            rows.append([slot, "(empty — add someone!)", "", ""])
+            continue
+        was = adv.previous.get(p.player_id) or "?"
+        rows.append([slot, player_label(p), f"{v:.1f}", "" if was == slot else f"was {was}"])
+    out.append(table(rows, ["Slot", "Player", unit(analysis), "Change"],
+                     ["<", "<", ">", "<"]))
+    bench = [[player_label(p), f"{v:.1f}"] for p, v in adv.lineup.bench]
+    if bench:
+        out.append("\nBench:\n" + table(bench, ["Player", unit(analysis)]))
+    if adv.moves:
+        out.append("\nSuggested moves:\n  " + "\n  ".join(adv.moves))
     else:
         out.append("\nYour current lineup is already optimal.")
-    if alerts:
+    if adv.injured_active:
         out.append("\nInjured players using an active roster spot (consider IR):\n  " +
-                   "\n  ".join(player_label(p) for p in alerts))
-    byes = [p for p in analysis.my_roster if p.bye_week == analysis.league.current_week]
-    if byes:
-        out.append("\nOn bye this week: " + ", ".join(p.name for p in byes))
+                   "\n  ".join(player_label(p) for p in adv.injured_active))
+    if adv.on_bye:
+        out.append("\nOn bye this week: " + ", ".join(p.name for p in adv.on_bye))
     return "\n".join(out)
 
 

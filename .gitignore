@@ -6,3 +6,4 @@ __pycache__/
 # Yahoo OAuth credentials and tokens - never commit these.
 oauth2.json
 *.oauth.json
+.streamlit/secrets.toml

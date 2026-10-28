@@ -1,6 +1,6 @@
 # Yahoo Fantasy Optimizer
 
-A command-line assistant for Yahoo Fantasy Sports leagues (NFL, NBA, NHL, MLB), built on
+A web app and command-line assistant for Yahoo Fantasy Sports leagues (NFL, NBA, NHL, MLB), built on
 [`yahoo_fantasy_api`](https://yahoo-fantasy-api.readthedocs.io/en/latest/introduction.html).
 Every week it tells you:
 
@@ -15,6 +15,48 @@ Every week it tells you:
 
 Works for head-to-head **points** leagues, head-to-head **categories** leagues, and (for
 lineup/waivers) rotisserie leagues.
+
+## Web app
+
+There's a web front end (`streamlit_app.py`) with a dashboard showing your win chance,
+playoff odds and top pickup, plus tabs for **Pickups**, **Lineup**, **Matchup**,
+**Playoff odds** and **Free agents**. Settings sliders control recent form, this week vs.
+rest of season, and so on.
+
+```bash
+pip install -e ".[web]"
+streamlit run streamlit_app.py      # opens http://localhost:8501 — demo leagues work right away
+```
+
+### Host it for free (Streamlit Community Cloud)
+
+1. **Deploy**: sign in at <https://share.streamlit.io> with GitHub → *Create app* → pick this
+   repo, branch `master`, main file `streamlit_app.py`. Under *Advanced settings*, choose
+   Python 3.12. You get a URL like `https://your-app-name.streamlit.app`. The demo leagues
+   work immediately.
+2. **Create a Yahoo app** at <https://developer.yahoo.com/apps/create/>:
+   - Redirect URI: your exact app URL, e.g. `https://your-app-name.streamlit.app`
+   - API permissions: **Fantasy Sports → Read**
+3. **Add secrets**: in Streamlit Cloud open your app → *Settings* → *Secrets* and paste
+   (template in `.streamlit/secrets.toml.example`):
+   ```toml
+   app_password = "pick-something-long"   # required: keeps strangers out of your league
+
+   [yahoo]
+   client_id = "..."
+   client_secret = "..."
+   redirect_uri = "https://your-app-name.streamlit.app"
+   ```
+4. **Connect**: open the app, enter your password, choose *My Yahoo league*, click
+   **Connect Yahoo** and approve. The app then shows a `refresh_token = "..."` line. Add it
+   under `[yahoo]` in Secrets so you stay logged in when the app restarts. (Already ran
+   `fantasy auth` locally? You can instead copy `refresh_token` from your `oauth2.json`.)
+   Optionally add `league_key = "..."` to pick your default league.
+
+Free-tier notes: the app goes to sleep after a few days without visitors and wakes up on
+the next visit (about 30 seconds). Data is cached for 30 minutes; use **Refresh data from
+Yahoo** in the sidebar to pull fresh data. You can also make the app private and invite
+specific viewers under *Settings → Sharing*.
 
 ## Try it right now (no Yahoo account needed)
 

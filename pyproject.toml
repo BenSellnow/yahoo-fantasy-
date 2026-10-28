@@ -8,10 +8,11 @@ version = "0.1.0"
 description = "Yahoo Fantasy Sports optimizer: lineups, waiver pickups, matchup and playoff odds"
 readme = "README.md"
 requires-python = ">=3.10"
-dependencies = ["yahoo_fantasy_api>=2.12"]
+dependencies = ["yahoo_fantasy_api>=2.12", "requests>=2.31"]
 
 [project.optional-dependencies]
 dev = ["pytest>=7"]
+web = ["streamlit>=1.40", "pandas>=2.2", "altair>=5.4"]
 
 [project.scripts]
 fantasy = "fantasy_optimizer.cli:main"

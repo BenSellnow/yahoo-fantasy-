@@ -1,0 +1,6 @@
+# Used by Streamlit Community Cloud to build the hosted app.
+yahoo_fantasy_api==2.12.3
+streamlit==1.66.1
+pandas>=2.2
+altair>=5.4
+requests>=2.31
