@@ -35,8 +35,14 @@ def exchange_code(client_id: str, client_secret: str, redirect_uri: str, code: s
 def write_oauth_file(client_id: str, client_secret: str, refresh_token: str,
                      redirect_uri: str = "oob", access_token: str = "",
                      token_time: float = 0.0, path: str | None = None) -> str:
-    """Write a yahoo_oauth credentials file. A zero token_time forces a refresh."""
-    path = path or os.path.join(tempfile.gettempdir(), "fantasy_oauth2.json")
+    """Write a yahoo_oauth credentials file. A zero token_time forces a refresh.
+
+    Each call gets its own private file (unless ``path`` is given), so two
+    people using the hosted app at once never share a token file.
+    """
+    if path is None:
+        fd, path = tempfile.mkstemp(prefix="yahoo_oauth_", suffix=".json")
+        os.close(fd)
     data = {
         "consumer_key": client_id, "consumer_secret": client_secret,
         "refresh_token": refresh_token, "access_token": access_token or "pending",
@@ -47,6 +53,15 @@ def write_oauth_file(client_id: str, client_secret: str, refresh_token: str,
     with os.fdopen(fd, "w") as f:
         json.dump(data, f)
     return path
+
+
+def forget(path: str | None) -> None:
+    """Delete a token file written by write_oauth_file."""
+    if path:
+        try:
+            os.remove(path)
+        except OSError:
+            pass
 
 
 def oauth_file_from_tokens(client_id, client_secret, redirect_uri, tokens: dict,

@@ -89,10 +89,13 @@ def show_new_token_notice():
     token = st.session_state.get("new_refresh_token")
     if not token:
         return
-    with st.expander("✅ Connected! Save this so you stay logged in", expanded=True):
-        st.write("Add this line under `[yahoo]` in your app's **Secrets** "
-                 "(Streamlit Cloud → your app → Settings → Secrets). Otherwise you'll "
-                 "need to reconnect whenever the app restarts.")
+    st.success("Connected to Yahoo for this session only. Nothing was saved; use "
+               "**Disconnect Yahoo** in the sidebar when you're done.")
+    with st.expander("Optional: stay connected across visits"):
+        st.write("Only if you are the sole user of this app: add this line under `[yahoo]` "
+                 "in your app's **Secrets** (Streamlit Cloud → your app → Settings → "
+                 "Secrets). Anyone who gets past the app password will then see your "
+                 "leagues without logging in. Treat it like a password.")
         st.code(f'refresh_token = "{token}"', language="toml")
 
 
@@ -355,6 +358,13 @@ def main():
         if not oauth_file:
             return
         show_new_token_notice()
+        if not conf.get("yahoo", {}).get("refresh_token"):
+            with st.sidebar:
+                if st.button("Disconnect Yahoo", width="stretch"):
+                    webauth.forget(st.session_state.pop("oauth_file", None))
+                    for k in ("new_refresh_token", "memo", "memo_owner"):
+                        st.session_state.pop(k, None)
+                    st.rerun()
         try:
             leagues = list_leagues(oauth_file)
         except Exception as e:

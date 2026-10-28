@@ -237,7 +237,11 @@ class YahooSource:
         self.sc = OAuth2(None, None, from_file=oauth_file)
         if not self.sc.token_is_valid():
             self.sc.refresh_access_token()
-        self.cache = DiskCache(cache_dir, cache_ttl)
+        # Many Yahoo responses depend on who is logged in, so each account
+        # gets its own cache folder.
+        account = hashlib.sha256(
+            f"{self.sc.consumer_key}:{self.sc.refresh_token}".encode()).hexdigest()[:16]
+        self.cache = DiskCache(Path(cache_dir) / account, cache_ttl)
         self._yfa = yfa
         self.league_key = league_key
         self._lg = None

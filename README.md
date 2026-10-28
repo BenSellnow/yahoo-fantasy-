@@ -61,10 +61,20 @@ streamlit run streamlit_app.py      # opens http://localhost:8501 — demo leagu
    redirect_uri = "https://your-app-name.streamlit.app"
    ```
 4. **Connect**: open the app, enter your password, choose *My Yahoo league*, click
-   **Connect Yahoo** and approve. The app then shows a `refresh_token = "..."` line. Add it
-   under `[yahoo]` in Secrets so you stay logged in when the app restarts. (Already ran
-   `fantasy auth` locally? You can instead copy `refresh_token` from your `oauth2.json`.)
-   Optionally add `league_key = "..."` to pick your default league.
+   **Connect Yahoo** and approve. By default the login lasts for **this browser session
+   only**: the token lives in a private temp file for your session, is never saved, and is
+   deleted when you click **Disconnect Yahoo**. Each visitor's login and cached data are
+   kept separate.
+   - *Optional, single user only:* to skip logging in each visit, copy the
+     `refresh_token = "..."` line the app offers into Secrets under `[yahoo]`. Anyone who
+     knows the app password then sees your leagues, so pick a strong password.
+   - Optionally add `league_key = "..."` to pick your default league.
+
+**Security summary.** Your Yahoo client secret and app password live only in Streamlit's
+encrypted Secrets, never in the repo (`.streamlit/secrets.toml` is git-ignored). Give the Yahoo
+app **Read** permission only: the optimizer never changes your roster, so even a leaked token
+can't make moves. You can revoke access at any time in your Yahoo account's security settings
+(connected apps).
 
 Free-tier notes: the app goes to sleep after a few days without visitors and wakes up on
 the next visit (about 30 seconds). Data is cached for 30 minutes; use **Refresh data from
