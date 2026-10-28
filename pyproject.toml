@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "fantasy-optimizer"
+version = "0.1.0"
+description = "Yahoo Fantasy Sports optimizer: lineups, waiver pickups, matchup and playoff odds"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = ["yahoo_fantasy_api>=2.12"]
+
+[project.optional-dependencies]
+dev = ["pytest>=7"]
+
+[project.scripts]
+fantasy = "fantasy_optimizer.cli:main"
+
+[tool.setuptools]
+packages = ["fantasy_optimizer"]
