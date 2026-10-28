@@ -431,6 +431,8 @@ def main():
         playoffs_tab(a, odds, sims)
     with tabs[4]:
         free_agents_tab(a)
+    if demo is None:
+        st.caption("Fantasy data provided by Yahoo Fantasy.")
 
 
 main()

@@ -355,6 +355,7 @@ def render_html(a, sims: int = 3000, week_weight: float = 0.35, note: str = "") 
 <div class="tiles">{tiles_html}</div>
 <nav role="tablist">{nav}</nav>
 {body}
+{"" if lg.league_key.startswith("demo") else '<p class="caption">Fantasy data provided by Yahoo Fantasy.</p>'}
 </div>
 <script>{JS}</script>
 """
