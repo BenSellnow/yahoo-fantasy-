@@ -23,6 +23,7 @@ class Projection:
     points: float
     week_factor: float      # share of a normal week the player plays this week
     season_factor: float    # share of games expected over the rest of the season
+    games_left: int | None = None  # games left this week, when the schedule is known
 
     def week_stats(self) -> dict[int, float]:
         return {k: v * self.week_factor for k, v in self.stats.items()}

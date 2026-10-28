@@ -41,8 +41,12 @@ def recommend(analysis, outlook=None, week_weight: float = WEEK_WEIGHT,
         week_val = Valuator(league, analysis.valuator.baselines, weights)
 
     def score(players):
-        return (analysis.best_lineup(players, "week", week_val).score,
-                analysis.best_lineup(players, "season").score)
+        if analysis.games_based:
+            # Daily lineups: value = games you can actually start this week.
+            week = analysis.streaming_score(players, week_val)
+        else:
+            week = analysis.best_lineup(players, "week", week_val).score
+        return week, analysis.best_lineup(players, "season").score
 
     base_week, base_season = score(roster)
     try:

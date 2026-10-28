@@ -8,7 +8,7 @@ import sys
 
 from . import report
 
-COMMANDS = ("report", "lineup", "waivers", "available", "matchup", "playoffs")
+COMMANDS = ("report", "lineup", "waivers", "available", "matchup", "playoffs", "html")
 
 
 def build_parser() -> argparse.ArgumentParser:
@@ -37,8 +37,13 @@ def build_parser() -> argparse.ArgumentParser:
         ("available", "Top available players"),
         ("matchup", "This week's win probability"),
         ("playoffs", "Playoff odds from a season simulation"),
+        ("html", "Write the full report as a standalone web page"),
     ]:
         p = sub.add_parser(name, help=help_)
+        if name == "html":
+            p.add_argument("-o", "--output", default="fantasy-report.html",
+                           help="File to write (default fantasy-report.html)")
+            p.add_argument("--note", default="", help="Banner text shown at the top")
         p.add_argument("--top", type=int, default=10, help="Rows to show")
         p.add_argument("--sims", type=int, default=3000, help="Season simulations")
         p.add_argument("--week-weight", type=float, default=0.35,
@@ -94,6 +99,12 @@ def main(argv=None):
     from .analysis import Analysis
     from .matchup import my_outlook
     analysis = Analysis.load(make_source(args), args.recent_weight, args.pool)
+    if args.command == "html":
+        from .html_report import render_html
+        with open(args.output, "w", encoding="utf-8") as f:
+            f.write(render_html(analysis, args.sims, args.week_weight, args.note))
+        print(f"Wrote {args.output}")
+        return
     print(report.render_header(analysis))
     if args.command == "report":
         print(report.render_report(analysis, args.top, args.sims, args.week_weight)

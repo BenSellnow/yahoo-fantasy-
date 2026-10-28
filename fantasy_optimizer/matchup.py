@@ -65,23 +65,30 @@ def week_progress(m: Matchup, today: dt.date | None = None) -> float:
     return 0.5
 
 
-def _points_dist(tw: TeamWeek, weekly: float, f: float) -> Dist:
+def _points_dist(tw: TeamWeek, weekly: float, f: float, games_based=False) -> Dist:
     current = tw.points or 0.0
     if tw.projected_points:
         # Yahoo's live projection already accounts for games remaining.
         total = tw.projected_points
         left = 1 - min(current / total, 1.0) if total > 0 else 1 - f
         return Dist(total, max(POINTS_CV * total * math.sqrt(left), 0.01))
-    rest = weekly * (1 - f)
+    rest = weekly if games_based else weekly * (1 - f)
     return Dist(current + rest, max(POINTS_CV * weekly * math.sqrt(1 - f), 0.01))
 
 
-def _cat_dist(cat, current, weekly, f) -> Dist:
+def _cat_dist(cat, current, weekly, f, games_based=False) -> Dist:
+    """``weekly`` is a full week's output, or (if ``games_based``) what the
+    lineup's remaining games are worth."""
     if cat.is_ratio:
-        mean = weekly if current is None or f == 0 else f * current + (1 - f) * weekly
+        if current is None or f == 0:
+            mean = weekly
+        elif weekly <= 0:  # nobody left to play: the current rate stands
+            mean = current
+        else:
+            mean = f * current + (1 - f) * weekly
         return Dist(mean, max(RATIO_CV * abs(weekly) * math.sqrt(1 - f), 1e-4))
-    rest = weekly * (1 - f)
-    var = (COUNT_CV * weekly) ** 2 * (1 - f) + rest
+    rest = weekly if games_based else weekly * (1 - f)
+    var = (COUNT_CV * rest) ** 2 / max(1 - f, 0.05) + rest
     return Dist((current or 0.0) + rest, max(math.sqrt(var), 1e-4))
 
 
@@ -96,20 +103,20 @@ def outlook_for(analysis, m: Matchup, team_key: str, sims: int = 10000,
     league = analysis.league
     me, opp = m.side(team_key), m.opponent_of(team_key)
     f = week_progress(m)
-    weekly_me = analysis.team_week_projection(analysis.current_starters(me.team_key))
-    weekly_opp = analysis.team_week_projection(analysis.current_starters(opp.team_key))
+    weekly_me = analysis.team_remaining_output(me.team_key)
+    weekly_opp = analysis.team_remaining_output(opp.team_key)
 
     if league.is_points:
-        a = _points_dist(me, weekly_me["points"], f)
-        b = _points_dist(opp, weekly_opp["points"], f)
+        a = _points_dist(me, weekly_me["points"], f, analysis.games_based)
+        b = _points_dist(opp, weekly_opp["points"], f, analysis.games_based)
         return MatchupOutlook(m.week, me.team_key, opp.team_key, f, pairwise(a, b),
                               points=(a, b), yahoo_win_prob=me.win_probability)
 
     cats = []
     for cat in league.categories:
         cur_a, cur_b = me.stats.get(cat.stat_id), opp.stats.get(cat.stat_id)
-        a = _cat_dist(cat, cur_a, weekly_me.get(cat.stat_id, 0.0), f)
-        b = _cat_dist(cat, cur_b, weekly_opp.get(cat.stat_id, 0.0), f)
+        a = _cat_dist(cat, cur_a, weekly_me.get(cat.stat_id, 0.0), f, analysis.games_based)
+        b = _cat_dist(cat, cur_b, weekly_opp.get(cat.stat_id, 0.0), f, analysis.games_based)
         cats.append(CategoryOutlook(cat.stat_id, cat.name, (cur_a, cur_b), (a, b),
                                     pairwise(a, b, cat.higher_is_better)))
     win, exp_a, exp_b = simulate_categories(

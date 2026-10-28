@@ -10,10 +10,16 @@ from fantasy_optimizer.waivers import plan_moves, recommend
 
 @pytest.mark.parametrize("sport", ["nfl", "nba"])
 @pytest.mark.parametrize("command", COMMANDS)
-def test_cli_commands_run(sport, command, capsys):
-    main(["--demo", sport, command, "--sims", "200"])
+def test_cli_commands_run(sport, command, capsys, tmp_path):
+    extra = ["-o", str(tmp_path / "r.html")] if command == "html" else []
+    main(["--demo", sport, command, "--sims", "200"] + extra)
     out = capsys.readouterr().out
-    assert "Your team:" in out
+    if command == "html":
+        page = (tmp_path / "r.html").read_text()
+        assert "<title>" in page and 'data-tab="matchup"' in page
+        assert "<script>" in page and "Splash Bros" in page or sport == "nfl"
+    else:
+        assert "Your team:" in out
 
 
 @pytest.mark.parametrize("sport", ["nfl", "nba"])

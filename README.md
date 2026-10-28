@@ -1,6 +1,7 @@
 # Yahoo Fantasy Optimizer
 
-A web app and command-line assistant for Yahoo Fantasy Sports leagues (NFL, NBA, NHL, MLB), built on
+A web app and command-line assistant for Yahoo Fantasy Sports, built first for **fantasy
+basketball** (it also handles NFL, NHL and MLB leagues), on
 [`yahoo_fantasy_api`](https://yahoo-fantasy-api.readthedocs.io/en/latest/introduction.html).
 Every week it tells you:
 
@@ -12,6 +13,18 @@ Every week it tells you:
 | `fantasy matchup` | Win probability for this week's head-to-head matchup (points or per-category) |
 | `fantasy playoffs` | Playoff odds, #1-seed odds and projected final records from a season simulation |
 | `fantasy available` | Top available players for this week and rest of season |
+| `fantasy html` | The whole report as one standalone web page you can open or share |
+
+### Built for basketball
+
+- **Games left this week.** The tool downloads the NBA's public season schedule, so every
+  projection knows how many games each player's team has left this week. A 4-game streamer
+  beats a slightly better 2-game player.
+- **Today's lineup.** Yahoo basketball lineups lock daily, so the lineup view starts only
+  players whose team plays today and tells you whom to bench.
+- **Day-by-day matchup simulation.** This week's category projections play out each remaining
+  day: the best lineup from that day's available players, one game each. Pickups are scored the
+  same way, so you see what a streamer adds in games you can actually start.
 
 Works for head-to-head **points** leagues, head-to-head **categories** leagues, and (for
 lineup/waivers) rotisserie leagues.
@@ -145,12 +158,23 @@ Correctly handles both per-category records and one-win-per-matchup category lea
   games each pro team plays in a given week isn't modeled.
 - Free agents vs. players on waivers are not distinguished, and FAAB bids aren't suggested.
 
-## Development
+## Testing
 
 ```bash
-pip install -e ".[dev]"
+pip install -e ".[dev,web]"
 pytest -q
 ```
+
+The suite (run by GitHub Actions on every push) covers:
+- **Front end** (`tests/test_app.py`): runs the real Streamlit app headlessly with Streamlit's
+  `AppTest`. It checks that the app opens on the basketball demo, every tab renders, switching
+  leagues and moving sliders works, and the password gate and Yahoo login screens behave.
+- **Analysis**: lineup optimizer (checked against brute force), schedule parsing, daily lineups,
+  matchup and playoff math, waiver recommendations.
+- **Yahoo adapter**: parsing of Yahoo-shaped API payloads and a full run against canned responses.
+
+To try the front end by hand without deploying, run `streamlit run streamlit_app.py` and pick a
+demo league, or run `fantasy --demo nba html` and open `fantasy-report.html`.
 
 The `DemoSource` in `fantasy_optimizer/demo.py` implements the same interface as the live
 `YahooSource`, so every feature can be exercised offline.

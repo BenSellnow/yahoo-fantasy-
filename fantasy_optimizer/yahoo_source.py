@@ -390,6 +390,13 @@ class YahooSource:
         return parse_scoreboard(self.get(
             f"league/{self.league_key}/scoreboard;week={week}", ttl))
 
+    def schedule(self):
+        """NBA game schedule (for games-per-week); None for other sports."""
+        if self.league_info().game_code != "nba":
+            return None
+        from .schedule import fetch_nba_schedule
+        return fetch_nba_schedule(self.cache)
+
     def recent_adds(self, count: int = 100) -> dict[int, int]:
         page = self.get(f"league/{self.league_key}/transactions;types=add;count={count}")
         adds: dict[int, int] = {}

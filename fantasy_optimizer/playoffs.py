@@ -54,7 +54,7 @@ def team_distributions(analysis) -> dict[str, dict]:
     out = {}
     for key in analysis.rosters:
         starters = [p for _, p, _ in analysis.best_lineup(analysis.rosters[key], "season").starters if p]
-        roster_proj = analysis.team_week_projection(starters)
+        roster_proj = analysis.team_week_projection(starters, "season")
         if league.is_points:
             hist = [t.points for t in history[key] if t.points is not None]
             out[key] = {"points": _blend(hist, roster_proj["points"], POINTS_CV)}

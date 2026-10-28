@@ -6,23 +6,27 @@ categories league.
 """
 from __future__ import annotations
 
+import datetime as dt
 import random
 
 from .lineup import optimize_lineup
+from .schedule import Schedule
 from .models import (Category, LeagueInfo, Matchup, Player, StandingsRow,
                      StatLine, TeamWeek)
 
 TEAM_NAMES = [
-    "Gridiron Gurus", "Waiver Wire Warriors", "The Replacements",
-    "Bench Mob", "Sleeper Cell", "Fourth & Long", "Trade Bait",
-    "Couch Commish", "Punt Intended", "Monday Night Miracle",
+    "Splash Bros", "Waiver Wire Warriors", "The Replacements",
+    "Bench Mob", "Sleeper Cell", "Board Men", "Trade Bait",
+    "Couch Commish", "Punt Intended", "Buzzer Beaters",
 ]
 PRO_TEAMS = ["ATL", "BOS", "CHI", "DAL", "DEN", "DET", "GB", "HOU", "KC",
              "LA", "MIA", "MIN", "NY", "PHI", "SEA", "SF"]
 FIRST = ["Alex", "Jordan", "Chris", "Marcus", "Tyler", "Devon", "Jalen",
          "Cam", "Isaiah", "Malik", "Trey", "Nico", "Andre", "Luka", "Zion"]
 LAST = ["Johnson", "Williams", "Brown", "Davis", "Miller", "Moore", "Jackson",
-        "White", "Harris", "Martin", "Thompson", "Allen", "Young", "King"]
+        "White", "Harris", "Martin", "Thompson", "Allen", "Young", "King",
+        "Walker", "Green", "Carter", "Mitchell", "Turner", "Parker", "Collins",
+        "Edwards", "Stewart", "Morris", "Reed", "Cook"]
 
 NBA_CATS = [
     Category(5, "FG%", "P", True, True), Category(8, "FT%", "P", True, True),
@@ -49,9 +53,10 @@ def round_robin(team_keys: list[str], weeks: int) -> list[list[tuple[str, str]]]
 
 
 class DemoSource:
-    def __init__(self, sport: str = "nfl", seed: int = 7):
+    def __init__(self, sport: str = "nba", seed: int = 7, today: dt.date | None = None):
         self.sport = sport
         self.rng = random.Random(seed)
+        self.today = today or dt.date.today()
         self.n_teams = 10
         self.team_keys = [f"demo.l.1.t.{i + 1}" for i in range(self.n_teams)]
         self.names = dict(zip(self.team_keys, TEAM_NAMES))
@@ -75,7 +80,8 @@ class DemoSource:
                               "C": 2, "Util": 2, "BN": 3, "IL": 2})
         else:
             raise ValueError("demo sport must be 'nfl' or 'nba'")
-        self.schedule = round_robin(self.team_keys, self.info.playoff_start_week - 1)
+        self.matchups = round_robin(self.team_keys, self.info.playoff_start_week - 1)
+        self._nba_schedule = self._make_nba_schedule() if sport == "nba" else None
         self._players: list[Player] = []
         self._talent: dict[int, dict] = {}
         self._make_players()
@@ -83,8 +89,34 @@ class DemoSource:
         self._history = self._simulate_history()
 
     # -- generation ------------------------------------------------------
+    def week_dates(self, week: int):
+        """NBA demo weeks run Monday-Sunday with the current week containing today."""
+        if self.sport != "nba":
+            return None, None
+        monday = self.today - dt.timedelta(days=self.today.weekday())
+        start = monday + dt.timedelta(weeks=week - self.info.current_week)
+        return start, start + dt.timedelta(days=6)
+
+    def week_progress(self) -> float:
+        start, _ = self.week_dates(self.info.current_week)
+        return (self.today - start).days / 7 if start else 0.55
+
+    def _make_nba_schedule(self):
+        start, _ = self.week_dates(1)
+        _, end = self.week_dates(self.info.end_week)
+        games, day = {}, start
+        while day <= end:
+            games[day] = set(self.rng.sample(PRO_TEAMS, 8))  # ~3.5 games/team/week
+            day += dt.timedelta(days=1)
+        return Schedule(games)
+
     def _name(self):
-        return f"{self.rng.choice(FIRST)} {self.rng.choice(LAST)}"
+        used = self.__dict__.setdefault("_used_names", set())
+        while True:
+            name = f"{self.rng.choice(FIRST)} {self.rng.choice(LAST)}"
+            if name not in used:
+                used.add(name)
+                return name
 
     def _status(self):
         r = self.rng.random()
@@ -222,22 +254,25 @@ class DemoSource:
 
     def _simulate_history(self):
         hist = {}
-        for week in range(1, self.info.current_week + 1):
-            live = week == self.info.current_week
+        progress = self.week_progress()
+        for week in range(1, len(self.matchups) + 1):
+            start, end = self.week_dates(week)
+            dates = (start.isoformat(), end.isoformat()) if start else (None, None)
+            live, past = week == self.info.current_week, week < self.info.current_week
             ms = []
-            for a, b in self.schedule[week - 1]:
-                ta, tb = self._team_week(a, week, 0.55 if live else 1), \
-                    self._team_week(b, week, 0.55 if live else 1)
-                if live and self.sport == "nfl":
-                    for t in (ta, tb):
-                        t.projected_points = round(t.points / 0.55 * self.rng.uniform(0.92, 1.08), 2)
-                ms.append(Matchup(week, "midevent" if live else "postevent",
-                                  None, None, (ta, tb)))
+            for a, b in self.matchups[week - 1]:
+                if past or live:
+                    scale = progress if live else 1
+                    ta, tb = self._team_week(a, week, scale), self._team_week(b, week, scale)
+                    if live and self.sport == "nfl":
+                        for t in (ta, tb):
+                            t.projected_points = round(
+                                t.points / scale * self.rng.uniform(0.92, 1.08), 2)
+                else:
+                    ta, tb = TeamWeek(a, week, {}), TeamWeek(b, week, {})
+                status = "midevent" if live else "postevent" if past else "preevent"
+                ms.append(Matchup(week, status, *dates, (ta, tb)))
             hist[week] = ms
-        for week in range(self.info.current_week + 1, len(self.schedule) + 1):
-            hist[week] = [Matchup(week, "preevent", None, None,
-                                  (TeamWeek(a, week, {}), TeamWeek(b, week, {})))
-                          for a, b in self.schedule[week - 1]]
         return hist
 
     # -- DataSource interface --------------------------------------------
@@ -258,6 +293,9 @@ class DemoSource:
 
     def scoreboard(self, week=None):
         return self._history.get(week or self.info.current_week, [])
+
+    def schedule(self):
+        return self._nba_schedule
 
     def standings(self):
         rows = {k: StandingsRow(k, self.names[k], 0, 0, 0, 0.0) for k in self.team_keys}

@@ -70,10 +70,11 @@ def hungarian_max(weights: list[list[float]]) -> list[int]:
 class Lineup:
     starters: list[tuple[str, Player | None, float]]  # (slot, player, value)
     bench: list[tuple[Player, float]]
+    empty_value: float = 0.0  # what an unfilled slot is worth (below any player)
 
     @property
     def starter_value(self) -> float:
-        return sum(v for _, p, v in self.starters if p is not None)
+        return sum(v if p is not None else self.empty_value for _, p, v in self.starters)
 
     @property
     def score(self) -> float:
@@ -83,7 +84,8 @@ class Lineup:
 
 def optimize_lineup(players: list[Player], slots: list[str],
                     values: dict[int, float],
-                    startable: dict[int, bool] | None = None) -> Lineup:
+                    startable: dict[int, bool] | None = None,
+                    empty_value: float | None = None) -> Lineup:
     """Pick the best starter for each slot.
 
     ``startable`` marks players who can actually play (not out or on bye);
@@ -121,4 +123,6 @@ def optimize_lineup(players: list[Player], slots: list[str],
         else:
             bench.append((p, v))
     bench.sort(key=lambda t: -t[1])
-    return Lineup(starters, bench)
+    if empty_value is None:
+        empty_value = min([0.0] + [v - 1 for v in values.values()])
+    return Lineup(starters, bench, empty_value)

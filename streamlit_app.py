@@ -20,11 +20,11 @@ from fantasy_optimizer.report import lineup_advice
 from fantasy_optimizer.waivers import drop_candidates, plan_moves, recommend, top_available
 
 logging.getLogger("yahoo_oauth").setLevel(logging.WARNING)
-st.set_page_config(page_title="Fantasy Optimizer", page_icon="🏈", layout="wide")
+st.set_page_config(page_title="Fantasy Optimizer", page_icon="🏀", layout="wide")
 
 BLUE, ORANGE, GRAY = "#2a78d6", "#eb6834", "#a3a29b"
-SOURCES = {"My Yahoo league": None, "Demo: NFL points league": "nfl",
-           "Demo: NBA categories league": "nba"}
+SOURCES = {"My Yahoo league": None, "Demo: NBA categories league": "nba",
+           "Demo: NFL points league": "nfl"}
 
 
 # -- secrets & access -----------------------------------------------------
@@ -129,6 +129,10 @@ def label(p) -> str:
     return f"{p.name} ({pos}, {p.team_abbr})"
 
 
+def games_left(a: Analysis, p):
+    return a.proj[p.player_id].games_left
+
+
 def pct(x) -> str:
     return f"{100 * x:.0f}%"
 
@@ -199,9 +203,10 @@ def pickups_tab(a: Analysis, outlook, week_weight):
     if recs:
         st.subheader("All good pickups")
         st.dataframe(pd.DataFrame([{
-            "Add": label(r.add), "Status": r.add.status, "Drop": r.drop.name if r.drop else "—",
+            "Add": label(r.add), "Status": r.add.status, "Games left": games_left(a, r.add),
+            "Drop": r.drop.name if r.drop else "—",
             "Gain": r.gain, "This week": r.week_gain, "Rest of season": r.season_gain,
-            "Recent adds": r.recent_adds} for r in recs]),
+            "Recent adds": r.recent_adds} for r in recs]).dropna(axis=1, how="all"),
             hide_index=True, width="stretch", column_config={
                 "Gain": st.column_config.NumberColumn(format="%+.2f"),
                 "This week": st.column_config.NumberColumn(format="%+.2f"),
@@ -217,6 +222,12 @@ def pickups_tab(a: Analysis, outlook, week_weight):
 
 def lineup_tab(a: Analysis):
     adv = lineup_advice(a)
+    if adv.horizon == "today":
+        st.subheader(f"Today's lineup — {a.today:%A, %b %d}")
+        st.caption("Basketball lineups lock daily: players whose team has no game today "
+                   "are benched so someone who's playing can start.")
+    else:
+        st.subheader(f"Week {a.league.current_week} lineup")
     if adv.moves:
         st.warning("**Lineup changes to make:**\n\n" + "\n".join(f"- {m}" for m in adv.moves))
     else:
@@ -226,14 +237,18 @@ def lineup_tab(a: Analysis):
                  ", ".join(f"{p.name} [{p.status}]" for p in adv.injured_active))
     if adv.on_bye:
         st.info("On bye this week: " + ", ".join(p.name for p in adv.on_bye))
+    if adv.idle_today:
+        st.info("No game today: " + ", ".join(p.name for p in adv.idle_today))
+    empty = "(nobody with a game today)" if adv.horizon == "today" else "(empty)"
     unit = "Proj pts/wk" if a.league.is_points else "Value (z)"
-    rows = [{"Slot": s, "Player": label(p) if p else "(empty)", "Status": p.status if p else "",
-             unit: v if p else None,
+    rows = [{"Slot": s, "Player": label(p) if p else empty, "Status": p.status if p else "",
+             "Games left": games_left(a, p) if p else None, unit: v if p else None,
              "Now in": (adv.previous.get(p.player_id) or "") if p else ""}
             for s, p, v in adv.lineup.starters]
-    rows += [{"Slot": "Bench", "Player": label(p), "Status": p.status, unit: v,
+    rows += [{"Slot": "Bench", "Player": label(p), "Status": p.status,
+              "Games left": games_left(a, p), unit: v,
               "Now in": adv.previous.get(p.player_id) or ""} for p, v in adv.lineup.bench]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch",
+    st.dataframe(pd.DataFrame(rows).dropna(axis=1, how="all"), hide_index=True, width="stretch",
                  column_config={unit: st.column_config.NumberColumn(format="%.1f")})
 
 
@@ -297,10 +312,12 @@ def playoffs_tab(a: Analysis, odds, sims):
 
 
 def free_agents_tab(a: Analysis):
-    rows = [{"Player": label(p), "Status": p.status, "This week": w, "Rest of season": s,
+    rows = [{"Player": label(p), "Status": p.status, "Games left": games_left(a, p),
+             "This week": w, "Rest of season": s,
              "Owned": p.percent_owned}
             for p, w, s in top_available(a, 40)]
-    st.dataframe(pd.DataFrame(rows), hide_index=True, width="stretch", column_config={
+    st.dataframe(pd.DataFrame(rows).dropna(axis=1, how="all"), hide_index=True,
+                 width="stretch", column_config={
         "This week": st.column_config.NumberColumn(format="%.1f"),
         "Rest of season": st.column_config.NumberColumn(format="%.1f"),
         "Owned": st.column_config.NumberColumn(format="%.0f%%")})

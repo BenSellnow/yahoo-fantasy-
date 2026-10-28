@@ -40,6 +40,11 @@ def player_label(p) -> str:
     return f"{p.name} ({pos}, {p.team_abbr}){tag}"
 
 
+def games_note(analysis, p) -> str:
+    g = analysis.proj[p.player_id].games_left
+    return "" if g is None else f" · {g} gm left"
+
+
 def render_header(analysis) -> str:
     lg = analysis.league
     kind = "points" if lg.is_points else "categories"
@@ -55,31 +60,41 @@ class LineupAdvice:
     moves: list[str]
     injured_active: list[Player]
     on_bye: list[Player]
+    horizon: str = "week"          # "today" for daily-lineup sports
+    idle_today: list[Player] = None  # starters whose team has no game today
 
 
 def lineup_advice(analysis) -> LineupAdvice:
-    lu = analysis.best_lineup(analysis.my_roster, "week")
+    horizon = analysis.lineup_horizon
+    lu = analysis.best_lineup(analysis.my_roster, horizon)
     current = {p.player_id: p.selected_position for p in analysis.my_roster}
-    moves = [f"START {p.name} at {slot}" for slot, p, _ in lu.starters
+    when = " today" if horizon == "today" else ""
+    moves = [f"START {p.name} at {slot}{when}" for slot, p, _ in lu.starters
              if p and current.get(p.player_id) in ("BN", None)]
     starters = {p.player_id for _, p, _ in lu.starters if p}
+    idle = []
     for p in analysis.my_roster:
         sel = current.get(p.player_id)
         if sel and sel not in INACTIVE_SLOTS and p.player_id not in starters:
             moves.append(f"SIT   {p.name} (currently {sel})")
+            if horizon == "today" and not analysis.schedule.plays_on(p.team_abbr, analysis.today):
+                idle.append(p)
     injured = [p for p in analysis.my_roster
                if availability(p.status) == 0 and not p.on_injury_slot]
     byes = [p for p in analysis.my_roster if p.bye_week == analysis.league.current_week]
-    return LineupAdvice(lu, current, moves, injured, byes)
+    return LineupAdvice(lu, current, moves, injured, byes, horizon, idle)
 
 
 def render_lineup(analysis) -> str:
-    out = [section(f"Optimal lineup — week {analysis.league.current_week}")]
     adv = lineup_advice(analysis)
+    when = f"today ({analysis.today:%a %b %d})" if adv.horizon == "today" \
+        else f"week {analysis.league.current_week}"
+    out = [section(f"Optimal lineup — {when}")]
     rows = []
     for slot, p, v in adv.lineup.starters:
         if p is None:
-            rows.append([slot, "(empty — add someone!)", "", ""])
+            rows.append([slot, "(nobody with a game today)" if adv.horizon == "today"
+                         else "(empty — add someone!)", "", ""])
             continue
         was = adv.previous.get(p.player_id) or "?"
         rows.append([slot, player_label(p), f"{v:.1f}", "" if was == slot else f"was {was}"])
@@ -97,6 +112,8 @@ def render_lineup(analysis) -> str:
                    "\n  ".join(player_label(p) for p in adv.injured_active))
     if adv.on_bye:
         out.append("\nOn bye this week: " + ", ".join(p.name for p in adv.on_bye))
+    if adv.idle_today:
+        out.append("\nNo game today: " + ", ".join(p.name for p in adv.idle_today))
     return "\n".join(out)
 
 
@@ -140,7 +157,8 @@ def render_waivers(analysis, outlook=None, top=10, week_weight=0.35) -> str:
     else:
         rows = []
         for r in recs:
-            rows.append([player_label(r.add), r.drop.name if r.drop else "(open spot)",
+            rows.append([player_label(r.add) + games_note(analysis, r.add),
+                         r.drop.name if r.drop else "(open spot)",
                          f"{r.gain:+.2f}", f"{r.week_gain:+.2f}", f"{r.season_gain:+.2f}",
                          "🔥" * min(r.recent_adds, 3)])
         out.append(table(rows, ["Add", "Drop", "Gain", "This wk", "Season", "Trend"],
